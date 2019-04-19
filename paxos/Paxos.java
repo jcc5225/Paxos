@@ -3,14 +3,19 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.rmi.registry.Registry;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
-
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.*;
+import java.util.concurrent.locks.*;
 /**
  * This class is the main class you need to implement paxos instances.
  */
 public class Paxos implements PaxosRMI, Runnable{
 
     ReentrantLock mutex;
+    Condition decided = mutex.newCondition();
     String[] peers; // hostname
     int[] ports; // host port
     int me; // index into peers[]
@@ -20,8 +25,33 @@ public class Paxos implements PaxosRMI, Runnable{
 
     AtomicBoolean dead;// for testing
     AtomicBoolean unreliable;// for testing
-
-    // Your data here
+    
+    Map<Long, Integer> idMap;
+    Map<Integer, A_State> seqMap;
+    int seq;
+    Object value;
+    AtomicInteger z;
+    int maxSeq;
+    //highest prepare seen
+    //highest accept seen
+    //n value
+    
+    private class A_State {
+    		
+    		int n_p;
+    		int n_prime;
+    		Object v_prime;
+        int n_a;
+        Object v_a;
+        Object v;
+        int n;
+        retStatus status; 
+        
+        public A_State(Object value) {
+        		status = new retStatus(State.Pending, null);
+        }
+    }
+    
 
 
     /**
@@ -39,7 +69,10 @@ public class Paxos implements PaxosRMI, Runnable{
         this.unreliable = new AtomicBoolean(false);
 
         // Your initialization code here
-
+        idMap = new HashMap<Long, Integer>();
+        seqMap = new HashMap<Integer, A_State>();
+        	z.set(-1);
+        	
 
         // register peers, do not modify this part
         try{
@@ -106,27 +139,127 @@ public class Paxos implements PaxosRMI, Runnable{
      * is reached.
      */
     public void Start(int seq, Object value){
-        // Your code here
+    		maxSeq = Math.max(seq, this.seq);
+        this.seq = seq;
+        this.value = value;
+        Thread t = new Thread(this);
+        t.start();
     }
 
     @Override
     public void run(){
-        //Your code here
+        Long id = Thread.currentThread().getId();
+        idMap.put(id, this.seq);
+        A_State local_state = new A_State(this.value);
+        seqMap.put(this.seq, local_state);
+        int countOk = 0;
+        Response resp;
+        while(local_state.status.state != State.Decided) {
+        		getN(local_state);
+        		countOk = 0;
+        		local_state.n_prime = 0;
+        		mutex.lock();
+        		for(int i = 0; i < peers.length; i++) {
+        			if (i == me) {
+    					resp = Prepare( new Request(local_state.n));
+    				} else {
+    					resp = Call("Prepare", new Request(local_state.n), i);
+    				}        			
+        			if (!resp.p_reject) {
+        				countOk++;
+        				if(resp.n_a > local_state.n_prime) {
+        					local_state.n_prime = resp.n_a;
+        					local_state.v_prime = resp.v_a;
+        				}
+        				
+        			}
+        		}
+        		if (countOk > peers.length/2) {
+        			if(local_state.n > local_state.n_prime) {
+        				local_state.v_prime = local_state.v;
+        			}
+        			countOk = 0;
+        			for(int i = 0; i < peers.length; i++) {
+        				if (i == me) {
+        					resp = Accept( new Request(local_state.n, local_state.v_prime));
+        				} else {
+        					resp = Call("Accept", new Request(local_state.n, local_state.v_prime), i);
+        				}
+        			
+        				if (!resp.a_reject) {
+            				countOk++;
+            				
+            			}
+        			}
+        			if(countOk > peers.length/2) {
+        				for(int i = 0; i < peers.length; i++) {
+        					if (i == me) {
+            					resp = Decide( new Request(local_state.v_prime));
+            				} else {
+            					resp = Call("Decide", new Request(local_state.v_prime), i);
+            				}
+            			}
+        			}
+        			
+        		}
+        		mutex.unlock();
+        }
+   
+    }
+    
+    public void getN(A_State local_state) {
+    		mutex.lock();
+    		int mod = local_state.n_p % peers.length;
+    		local_state.n = local_state.n_p + mod + me;
+    		mutex.unlock();
     }
 
     // RMI handler
     public Response Prepare(Request req){
-        // your code here
-
+    		mutex.lock();
+    		Response res = new Response();
+    		int seq = idMap.get(Thread.currentThread().getId());
+    		A_State a_state = seqMap.get(seq);
+    		if (req.n > a_state.n_p) {
+        		a_state.n_p = req.n;
+        		res.prepareOk(a_state.n_p, a_state.n_a, a_state.v_a);
+        } else {
+        		res.prepareReject();
+        }
+    	
+    		mutex.unlock();
+    		return res;
+    		    
     }
 
     public Response Accept(Request req){
-        // your code here
+    		mutex.lock();
+    		Response res = new Response();
+		int seq = idMap.get(Thread.currentThread().getId());
+		A_State a_state = seqMap.get(seq);
+    		
+    		if (req.n > a_state.n_p) {
+    			a_state.n_p = req.n;
+    			a_state.n_a = req.n;
+    			a_state.v_a = req.v;
+    			res.acceptOk(a_state.n_p);
+    		} else {
+    			res.acceptReject();
+    		}
+    		mutex.unlock();
+    		return res;  
 
     }
 
     public Response Decide(Request req){
-        // your code here
+    		mutex.lock();
+    		int seq = idMap.get(Thread.currentThread().getId());
+		A_State a_state = seqMap.get(seq);
+		a_state.status.state = State.Decided;
+		a_state.status.v = req.v;
+		mutex.unlock();
+		decided.signalAll();
+		return null;
 
     }
 
@@ -137,7 +270,15 @@ public class Paxos implements PaxosRMI, Runnable{
      * see the comments for Min() for more explanation.
      */
     public void Done(int seq) {
-        // Your code here
+        for(int i = z; i <= seq; i++) {
+        		while(seqMap.get(i).status.state != State.Decided) {
+        			decided.await();
+        		}
+        }
+    }
+    
+    public int getMaxDone() {
+    	
     }
 
 
@@ -147,7 +288,7 @@ public class Paxos implements PaxosRMI, Runnable{
      * this peer.
      */
     public int Max(){
-        // Your code here
+        return maxSeq;
     }
 
     /**
@@ -193,8 +334,7 @@ public class Paxos implements PaxosRMI, Runnable{
      * it should not contact other Paxos peers.
      */
     public retStatus Status(int seq){
-        // Your code here
-
+    		return seqMap.get(seq).status;
     }
 
     /**
