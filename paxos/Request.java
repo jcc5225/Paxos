@@ -12,16 +12,20 @@ public class Request implements Serializable {
     // Your data here
     int n;
     Object v;
+    Integer seq;
     
-    public Request(int n) {
+    public Request(int n, Integer seq) {
     		this.n = n;
+    		this.seq = seq;
     }
-    public Request(Object v) {
+    public Request(Object v, Integer seq) {
     		this.v = v;
+    		this.seq = seq;
     }
-    public Request(int n, Object v) {
+    public Request(int n, Object v, Integer seq) {
     		this.n = n;
     		this.v = v;
+    		this.seq = seq;
     }
     
     

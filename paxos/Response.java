@@ -48,6 +48,3 @@ public class Response implements Serializable {
 		a_reject = true;
     }
 }
- 
-    // Your constructor and methods here
-}

@@ -13,4 +13,5 @@ public interface PaxosRMI extends Remote{
     Response Prepare(Request req) throws RemoteException;
     Response Accept(Request req) throws RemoteException;
     Response Decide(Request req) throws RemoteException;
+    Integer getMaxDone() throws RemoteException;
 }
