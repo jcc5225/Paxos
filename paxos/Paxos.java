@@ -51,7 +51,10 @@ public class Paxos implements PaxosRMI, Runnable{
         retStatus status; 
         
         public A_State(Object value) {
-        		status = new retStatus(State.Pending, null);
+        		status = new retStatus(State.Pending, value);
+        		this.v = value;
+        		this.n_p = -1;
+        		this.n_a = 0;
         }
     }
     
@@ -145,14 +148,15 @@ public class Paxos implements PaxosRMI, Runnable{
      * is reached.
      */
     public void Start(int seq, Object value){
-        // TODO check for already started
+        if (idMap.containsValue(seq))
+            return;
         mutex.lock();
         maxSeq = Math.max(seq, this.seq);
         this.seq = seq;
         this.value = value;
         Thread t = new Thread(this);
         idMap.put(t.getId(), this.seq);
-        A_State local_state = new A_State(this.value);
+        A_State local_state = new A_State(value);
         seqMap.put(this.seq, local_state);
         t.start();
         started.signalAll();
@@ -187,7 +191,7 @@ public class Paxos implements PaxosRMI, Runnable{
         			}
         		}
         		if (countOk > peers.length/2) {
-        			if(local_state.n > local_state.n_prime) {
+        			if(local_state.n >= local_state.n_prime) {
         				local_state.v_prime = local_state.v;
         			}
         			countOk = 0;
@@ -221,8 +225,9 @@ public class Paxos implements PaxosRMI, Runnable{
     
     public void getN(A_State local_state) {
     		mutex.lock();
-    		int mod = local_state.n_p % peers.length;
-    		local_state.n = local_state.n_p + mod + me;
+    		int n_p = Math.max(0, local_state.n_p);
+    		int mod = n_p % peers.length;
+    		local_state.n = n_p + mod + me;
     		mutex.unlock();
     }
 
@@ -230,28 +235,28 @@ public class Paxos implements PaxosRMI, Runnable{
     public Response Prepare(Request req){
         Response res = null;
         try {
-            mutex.lock();
+            //mutex.lock();
             res = new Response();
             A_State a_state = seqMap.get(req.seq);
-            while (a_state == null) {
-                started.await();
-                a_state = seqMap.get(req.seq);
+            if (a_state ==  null) {
+                a_state = new A_State(null);
+                seqMap.put(req.seq, a_state);
+                a_state.n_p = req.n;
+                res.prepareOk(req.n, 0, 0);
             }
-            if (req.n > a_state.n_p) {
+            else if (req.n > a_state.n_p) {
                 a_state.n_p = req.n;
                 res.prepareOk(a_state.n_p, a_state.n_a, a_state.v_a);
             } else {
                     res.prepareReject();
             }
 
-            mutex.unlock();
-
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             res = null;
         }
         finally {
-            mutex.unlock();
+            //mutex.unlock();
             return res;
         }
     }
@@ -259,13 +264,13 @@ public class Paxos implements PaxosRMI, Runnable{
     public Response Accept(Request req){
         Response res = new Response();
         try {
-            mutex.lock();
+            //mutex.lock();
             A_State a_state = seqMap.get(req.seq);
             while (a_state == null) {
                 started.await();
                 a_state = seqMap.get(req.seq);
             }
-            if (req.n > a_state.n_p) {
+            if (req.n >= a_state.n_p) {
                 a_state.n_p = req.n;
                 a_state.n_a = req.n;
                 a_state.v_a = req.v;
@@ -273,13 +278,11 @@ public class Paxos implements PaxosRMI, Runnable{
             } else {
                 res.acceptReject();
             }
-            mutex.unlock();
-            return res;
         } catch (InterruptedException e) {
             e.printStackTrace();
             res = null;
         } finally {
-            mutex.unlock();
+            //mutex.unlock();
             return res;
         }
 
@@ -287,7 +290,7 @@ public class Paxos implements PaxosRMI, Runnable{
 
     public Response Decide(Request req){
         try {
-            mutex.lock();
+            //mutex.lock();
             A_State a_state = seqMap.get(req.seq);
             while (a_state == null) {
                 started.await();
@@ -298,9 +301,10 @@ public class Paxos implements PaxosRMI, Runnable{
         } catch (InterruptedException e) {
             e.printStackTrace();
         } finally {
-            mutex.unlock();
+            //mutex.unlock();
             decided.signalAll();
-            return null;
+            z.set(req.seq);
+            return new Response();
         }
 
     }

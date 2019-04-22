@@ -26,6 +26,8 @@ public class Response implements Serializable {
     public Response() {
     		a_reject = false;
     		p_reject = false;
+    		this.n_a = 0;
+    		this.v_a = 0;
     }
     
     public void acceptOk(int n) {
