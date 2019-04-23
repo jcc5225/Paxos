@@ -177,11 +177,11 @@ public class Paxos implements PaxosRMI, Runnable{
         		mutex.lock();
         		for(int i = 0; i < peers.length; i++) {
         			if (i == me) {
-    					resp = Prepare( new Request(local_state.n, seq));
+    					resp = Prepare(new Request(local_state.n, seq));
     				} else {
     					resp = Call("Prepare", new Request(local_state.n, seq), i);
     				}        			
-        			if (!resp.p_reject) {
+        			if (resp != null && !resp.p_reject) {
         				countOk++;
         				if(resp.n_a > local_state.n_prime) {
         					local_state.n_prime = resp.n_a;
@@ -202,7 +202,7 @@ public class Paxos implements PaxosRMI, Runnable{
         					resp = Call("Accept", new Request(local_state.n, local_state.v_prime, seq), i);
         				}
         			
-        				if (!resp.a_reject) {
+        				if (resp != null && !resp.a_reject) {
             				countOk++;
             				
             			}
@@ -302,8 +302,8 @@ public class Paxos implements PaxosRMI, Runnable{
             e.printStackTrace();
         } finally {
             //mutex.unlock();
+            //z.set(req.seq);
             decided.signalAll();
-            z.set(req.seq);
             return new Response();
         }
 
@@ -316,7 +316,7 @@ public class Paxos implements PaxosRMI, Runnable{
      * see the comments for Min() for more explanation.
      */
     public void Done(int seq) {
-        for(int i = z.get(); i <= seq; i++) {
+        for(int i = this.z.get(); i <= seq; i++) {
         		while(seqMap.get(i).status.state != State.Decided) {
                     try {
                         decided.await();
@@ -324,7 +324,7 @@ public class Paxos implements PaxosRMI, Runnable{
                         e.printStackTrace();
                     }
                 }
-        		z.set(i);
+        		this.z.set(i);
         }
     }
     
@@ -385,14 +385,25 @@ public class Paxos implements PaxosRMI, Runnable{
                     stub=(PaxosRMI) registry.lookup("Paxos");
                     min = Math.min(min, stub.getMaxDone());
                 }
-
             }
         } catch (RemoteException e) {
             e.printStackTrace();
         } catch (NotBoundException e) {
             e.printStackTrace();
         }
-        // TODO forget all less than min
+
+        for(int i: seqMap.keySet()) {
+            if (i < min) {
+                seqMap.remove(i);
+            } else {
+                break;
+            }
+        }
+        for(long i: idMap.keySet()) {
+            if ((int)idMap.get(i) < min) {
+                idMap.remove(i);
+            }
+        }
 
         return min;
     }
