@@ -214,7 +214,11 @@ public class Paxos implements PaxosRMI, Runnable{
         				} else {
         					resp = Call("Accept", new Request(local_state.n, local_state.v_prime, seq), i);
         				}
-        			
+        				if (resp != null && resp.decided) {
+                            Decide(new Request(resp.v_d, seq));
+                            mutex.unlock();
+                            return;
+                        }
         				if (resp != null && !resp.a_reject) {
             				countOk++;
             				
@@ -286,7 +290,10 @@ public class Paxos implements PaxosRMI, Runnable{
                 started.await();
                 a_state = seqMap.get(req.seq);
             }
-            if (req.n >= a_state.n_p) {
+            if (a_state.status.state == State.Decided) {
+                res.decided(a_state.status.v);
+            }
+            else if (req.n >= a_state.n_p) {
                 a_state.n_p = req.n;
                 a_state.n_a = req.n;
                 a_state.v_a = req.v;
