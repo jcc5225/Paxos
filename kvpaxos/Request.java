@@ -8,9 +8,27 @@ import java.io.Serializable;
  */
 public class Request implements Serializable {
     static final long serialVersionUID=11L;
-    // Your data here
 
+    int n;
+    Object v;
+    Integer seq;
+    Op operation;
 
-    // Your constructor and methods here
+    public Request(int n, Integer seq) {
+        this.n = n;
+        this.seq = seq;
+    }
+    public Request(Object v, Integer seq) {
+        this.v = v;
+        this.seq = seq;
+    }
+    public Request(int n, Object v, Integer seq) {
+        this.n = n;
+        this.v = v;
+        this.seq = seq;
+    }
+    public Request(Op operation) {
+        this.operation = operation;
+    }
 
 }

@@ -17,4 +17,21 @@ public class Op implements Serializable{
         this.key = key;
         this.value = value;
     }
+
+    public Op(String op, String key, Integer value){
+        this.op = op;
+        this.key = key;
+        this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        assert(obj instanceof Op);
+        Op other = (Op) obj;
+        boolean sameKey = (op.equals(other.op) && key.equals(other.key));
+        if (op.equals("put"))
+            return sameKey && value.equals(other.value);
+        else
+            return sameKey;
+    }
 }

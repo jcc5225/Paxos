@@ -8,12 +8,13 @@ public class Client {
     String[] servers;
     int[] ports;
 
-    // Your data here
+    int id;
 
 
     public Client(String[] servers, int[] ports){
         this.servers = servers;
         this.ports = ports;
+        id = 0;
         // Your initialization code here
     }
 
@@ -50,14 +51,26 @@ public class Client {
 
     // RMI handlers
     public Integer Get(String key){
-        // Your code here
-        return null;
+        Op oper = new Op("get", key, null);
+        Request req = new Request(oper);
+        Response resp = null;
+        while (resp == null) {
+            resp = Call("Get", req, id);
+            id = (id + 1) % servers.length;
+        }
+        return resp.value;
 
     }
 
     public boolean Put(String key, Integer value){
-        // Your code here
-        return false;
+        Op oper = new Op("put", key, value);
+        Request req = new Request(oper);
+        Response resp = null;
+        while (resp == null) {
+            resp = Call("Put", req, id);
+            id = (id + 1) % servers.length;
+        }
+        return resp.success;
     }
 
 }

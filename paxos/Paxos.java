@@ -40,7 +40,8 @@ public class Paxos implements PaxosRMI, Runnable{
     //n value
     
     private class A_State {
-    		
+
+        ReentrantLock mutex;
         int n_p;
         int n_prime;
         Object v_prime;
@@ -51,6 +52,7 @@ public class Paxos implements PaxosRMI, Runnable{
         retStatus status; 
         
         public A_State(Object value) {
+                this.mutex = new ReentrantLock();
         		status = new retStatus(State.Pending, value);
         		this.v = value;
         		this.n_p = -1;
@@ -173,7 +175,9 @@ public class Paxos implements PaxosRMI, Runnable{
         while(local_state.status.state != State.Decided) {
         		getN(local_state);
         		countOk = 0;
+        		local_state.mutex.lock();
         		local_state.n_prime = 0;
+        		local_state.mutex.unlock();
         		mutex.lock();
         		for(int i = 0; i < peers.length; i++) {
         			if (i == me) {
@@ -189,15 +193,19 @@ public class Paxos implements PaxosRMI, Runnable{
         			else if (resp != null && !resp.p_reject) {
         				countOk++;
         				if(resp.n_a > local_state.n_prime) {
+        				    local_state.mutex.lock();
         					local_state.n_prime = resp.n_a;
         					local_state.v_prime = resp.v_a;
+        					local_state.mutex.unlock();
         				}
         				
         			}
         		}
         		if (countOk > peers.length/2) {
         			if(local_state.n >= local_state.n_prime) {
+        			    local_state.mutex.lock();
         				local_state.v_prime = local_state.v;
+        				local_state.mutex.unlock();
         			}
         			countOk = 0;
         			for(int i = 0; i < peers.length; i++) {
@@ -429,8 +437,10 @@ public class Paxos implements PaxosRMI, Runnable{
     public retStatus Status(int seq){
         // TODO what if state has been forgotten?
         A_State state = seqMap.get(seq);
-        if (state == null)
+        if (state == null && seq > z.get())
             return new retStatus(State.Pending, null);
+        else if (state == null && seq <= z.get())
+            return new retStatus(State.Forgotten, null);
         else
     		return state.status;
     }
