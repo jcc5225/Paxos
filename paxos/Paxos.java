@@ -324,7 +324,8 @@ public class Paxos implements PaxosRMI, Runnable{
      * see the comments for Min() for more explanation.
      */
     public void Done(int seq) {
-        for(int i = z.get(); i <= seq; i++) {
+        int min = Math.max(z.get(), 0);
+        for(int i = min; i <= seq; i++) {
         		while(seqMap.get(i).status.state != State.Decided) {
                     try {
                         decided.await();
@@ -413,7 +414,7 @@ public class Paxos implements PaxosRMI, Runnable{
             }
         }
 
-        return min;
+        return min + 1;
     }
 
 
