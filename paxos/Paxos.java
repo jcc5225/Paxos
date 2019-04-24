@@ -177,11 +177,16 @@ public class Paxos implements PaxosRMI, Runnable{
         		mutex.lock();
         		for(int i = 0; i < peers.length; i++) {
         			if (i == me) {
-    					resp = Prepare(new Request(local_state.n, seq));
+    					resp = Prepare( new Request(local_state.n, seq));
     				} else {
     					resp = Call("Prepare", new Request(local_state.n, seq), i);
-    				}        			
-        			if (resp != null && !resp.p_reject) {
+    				}
+        			if (resp.decided) {
+        			    Decide(new Request(resp.v_d, seq));
+        			    mutex.unlock();
+        			    return;
+                    }
+        			else if (resp != null && !resp.p_reject) {
         				countOk++;
         				if(resp.n_a > local_state.n_prime) {
         					local_state.n_prime = resp.n_a;
@@ -202,7 +207,7 @@ public class Paxos implements PaxosRMI, Runnable{
         					resp = Call("Accept", new Request(local_state.n, local_state.v_prime, seq), i);
         				}
         			
-        				if (resp != null && !resp.a_reject) {
+        				if (!resp.a_reject) {
             				countOk++;
             				
             			}
@@ -243,6 +248,9 @@ public class Paxos implements PaxosRMI, Runnable{
                 seqMap.put(req.seq, a_state);
                 a_state.n_p = req.n;
                 res.prepareOk(req.n, 0, 0);
+            }
+            else if (a_state.status.state == State.Decided) {
+                res.decided(a_state.status.v);
             }
             else if (req.n > a_state.n_p) {
                 a_state.n_p = req.n;
@@ -316,7 +324,7 @@ public class Paxos implements PaxosRMI, Runnable{
      * see the comments for Min() for more explanation.
      */
     public void Done(int seq) {
-        for(int i = this.z.get(); i <= seq; i++) {
+        for(int i = z.get(); i <= seq; i++) {
         		while(seqMap.get(i).status.state != State.Decided) {
                     try {
                         decided.await();
@@ -324,7 +332,7 @@ public class Paxos implements PaxosRMI, Runnable{
                         e.printStackTrace();
                     }
                 }
-        		this.z.set(i);
+        		z.set(i);
         }
     }
     

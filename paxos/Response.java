@@ -12,10 +12,12 @@ public class Response implements Serializable {
     boolean ack;
     int n_a;
     Object v_a;
+    Object v_d;
     type type;
     int n;
     boolean a_reject;
     boolean p_reject;
+    boolean decided;
     
     public enum type {
     	ACCEPT,
@@ -26,6 +28,7 @@ public class Response implements Serializable {
     public Response() {
     		a_reject = false;
     		p_reject = false;
+    		decided = false;
     		this.n_a = 0;
     		this.v_a = 0;
     }
@@ -48,5 +51,10 @@ public class Response implements Serializable {
     public void acceptReject() {
 		type = type.ACCEPT;
 		a_reject = true;
+    }
+
+    public void decided(Object value) {
+        this.v_d = value;
+        decided = true;
     }
 }
